@@ -1,40 +1,39 @@
 <?php
-session_start();
-
-$start_time=microtime(true);
-ini_set('display_errors', '1');
+//$start_time=microtime(true);
+//ini_set('display_errors', '1');
  
 $debugMode = 0;
-$geoidJband = 30.0/1800.0;
-$geoidIband = 0.025;
-
-$dbhost = "localhost";
-$dbdatabase = "locapoint_geoid";
-$dbuser = "locapoint_geoid";
-$dbpw = "tile";
 
 function main(){
         
-        global $geoidJband;
-        global $geoidIband;
         global $debugMode;
         
-        global $dbhost;
-        global $dbdatabase;
-        global $dbuser;
-        global $dbpw;
+        $geoidJband = 30.0/1800.0;
+        $geoidIband = 0.025;
+
+        //データベースの接続情報を入れてください
+        $dbhost = "localhost"
+        $dbdatabase = "*****";
+        $dbuser = "*****";
+        $dbpw = "*****";
         
         
         //Get Parameter
         $z = $_GET['z'];
         $x = $_GET['x'];
         $y = $_GET['y'];
+        $geoidonly = $_GET['geoidonly'];//ジオイドのみのタイルが欲しい時
+        
         debug("z=".$z);
         debug("x=".$x);
         debug("y=".$y);
         
         //地理院のDEMタイル(PNG)をダウンロード
-        $filepath = "http://cyberjapandata.gsi.go.jp/xyz/dem_png/".$z."/".$x."/".$y.".png";
+        if($geoidonly === "1"){
+            $filepath = "./empty.png";    //ジオイドのみのタイルが欲しい時
+        }else{
+            $filepath = "http://cyberjapandata.gsi.go.jp/xyz/dem_png/".$z."/".$x."/".$y.".png";
+        }
         $im = imageCreateFromPng($filepath);
         if($im===false){
             //タイルが無いとき
@@ -55,7 +54,7 @@ function main(){
         
         //タイル四隅のi/j座標取得
         //i/jは国土地理院のジオイドデータの格子点で、
-        //iは東経120°から東へ向かって150°まで1.5分間隔で0〜1800まで
+        //iは東経120°から東へ向かって150°まで1.5分間隔で0～1800まで
         //jは北緯20°から北へ向かって50°まで1分間隔で0から1200まで
         $j0 = floor(($lon0 - 120)/$geoidIband);
         $j1 = ceil(($lon1 - 120)/$geoidIband);
@@ -81,7 +80,7 @@ function main(){
         while($px < 256){
             $west[$px] = floor($j);        //使用するジオイドデータ西側格子点 j
             $east[$px] = $west[$px] + 1;   //使用するジオイドデータ東側格子点 j+1
-            $u[$px] = $j - $west[$px];     //このピクセルと西側格子点までの距離（単位は格子点座標にて0〜1の間）内挿計算方法の式で u に相当する
+            $u[$px] = $j - $west[$px];     //このピクセルと西側格子点までの距離（単位は格子点座標にて0～1の間）内挿計算方法の式で u に相当する
             $ui[$px] = 1-$u[$px];          //内挿計算方法の式で (1-u) に相当する
             $px+=1;
             $j+=$jTileBand;
@@ -92,101 +91,52 @@ function main(){
         while($py < 256){
             $north[$py] = ceil($i);        //使用するジオイドデータ北側格子点 i+1
             $south[$py] = $north[$py] - 1; //使用するジオイドデータ南側格子点 i
-            $t[$py] = $i - $south[$py];    //このピクセルと南側格子点までの距離（単位は格子点座標にて0〜1の間）内挿計算方法の式で v に相当する
+            $t[$py] = $i - $south[$py];    //このピクセルと南側格子点までの距離（単位は格子点座標にて0～1の間）内挿計算方法の式で v に相当する
             $ti[$py] = 1- $t[$py];         //内挿計算方法の式で (1-v) に相当する
             $py++;
             $i-=$iTileBand;
         }
         
         
-        //一度使ったジオイドデータは$_SESSION変数に入れておくので、同一セッション内でのデータベース呼び出しは必要な時のみ行う。
-        //今回のタイルで必要なジオイドデータが全てセッション変数にあるかどうか確認
-        $needDbAccess = false;
-        $k = (int)$j0;
-        while($k <= $j1){
-                $m = (int)$i0;
-                while($m <= $i1){
-                        $key = $m."_".$k;
-                        if(!isset($_SESSION[$key])){
-                                $needDbAccess = true;
-                                break;
-                        }else{
-                        }
-                        $m+=1;
-                }
-                $k+=1;
-        }        
         //データベースアクセス
         //ジオイドが有効値（「e」でない）のデータのみデータベースに入っている
-        if($needDbAccess===true){
-                debug("Need DB access");
-                $cn = mysql_connect($dbhost, $dbuser, $dbpw);
-                if (!$cn) {
-                        debug('DB接続失敗');
-                        exit;
-                }
-                debug('DB接続成功');
-                $db_selected = mysql_select_db($dbdatabase, $cn);
-                if (!$db_selected){
-                        debug('データベース選択失敗');
-                        exit;
-                }
-                debug('データベース選択成功');
-                
-                mysql_set_charset('utf8');
-                $sql = 'SELECT * FROM geoid WHERE j >= ' . $j0 . " AND j <= " . $j1 . " AND i >= " . $i0 . " AND i <= " . $i1 . " LIMIT 1000 " ;
-                debug($sql);
-                $result = mysql_query($sql);
-                if (!$result) {
-                        debug('クエリー失敗');
-                        exit;
-                }
-                $exist = 0;
-                while ($row = mysql_fetch_assoc($result)) {
-                    $exist = 1;
-                        $key = $row['i']."_".$row['j'];
-                        $_SESSION[$key] = $row['geoid'];
-                        debug($row['geoid']);
-                }
-                
-                if($exist===0){
-                    debug("NO Geoid DATA");
-                }
- 
-                $close_flag = mysql_close($cn);
-                if ($close_flag){
-                    debug('切断成功');
-                }
-                while($k <= $j1){
-                        $m = (int)$i0;
-                        while($m <= $i1){
-                                $key = $m."_".$k;
-                                if(!isset($_SESSION[$key])){
-                                        $_SESSION[$m."_".$k]="e";
-                                }else{
-                                }
-                                $m+=1;
-                        }
-                        $k+=1;
-                }        
- 
-        }else{
-                debug("No Need DB access");
+        $cn = mysql_connect($dbhost, $dbuser, $dbpw);
+        if (!$cn) {
+                debug('DB接続失敗');
+                exit;
+        }
+        debug('DB接続成功');
+        $db_selected = mysql_select_db($dbdatabase, $cn);
+        if (!$db_selected){
+                debug('データベース選択失敗');
+                exit;
+        }
+        debug('データベース選択成功');
+        
+        mysql_set_charset('utf8');
+        $sql = 'SELECT * FROM geoid WHERE j >= ' . $j0 . " AND j <= " . $j1 . " AND i >= " . $i0 . " AND i <= " . $i1 . " LIMIT 70000 " ;
+        debug($sql);
+        $result = mysql_query($sql);
+        if (!$result) {
+                debug('クエリー失敗');
+                exit;
+        }
+        $exist = 0;
+        while ($row = mysql_fetch_assoc($result)) {
+            $exist = 1;
+                $key = $row['i']."_".$row['j'];
+                $GEOID[$key] = $row['geoid'];
+                debug($row['geoid']);
         }
         
-        $j = (int)$j0;
-        while($j <= $j1){
-                $i = (int)$i0;
-                while($i <= $i1){
-                        $key = $i."_".$j;
-                        if(!isset($_SESSION[$key])){
-                                $_SESSION[$key]="e";    //対象データが無いものは「e」なので、セッション変数にセットしておく
-                        }else{
-                        }
-                        $i+=1;
-                }
-                $j+=1;
-        }        
+        if($exist===0){
+            debug("NO Geoid DATA");
+        }
+
+        $close_flag = mysql_close($cn);
+        if ($close_flag){
+            debug('切断成功');
+        }
         
         
         //ジオイド値計算
@@ -195,10 +145,10 @@ function main(){
             $linebuf="";
             for($py=0; $py<256; $py++){
                 //計算
-                if (($_SESSION[$south[$py]."_".$west[$px]] === "e") 
-                || ($_SESSION[$south[$py]."_".$east[$px]] === "e") 
-                || ($_SESSION[$north[$py]."_".$west[$px]] === "e") 
-                || ($_SESSION[$north[$py]."_".$east[$px]] === "e"))
+                if (!isset($GEOID[$south[$py]."_".$west[$px]]) 
+                ||  !isset($GEOID[$south[$py]."_".$east[$px]]) 
+                ||  !isset($GEOID[$north[$py]."_".$west[$px]]) 
+                ||  !isset($GEOID[$north[$py]."_".$east[$px]]))
                 {
                     //四隅の格子点のジオイド値のいずれかが「e」のとき、無効値にセット
                     //$linebuf .= "e,";
@@ -206,36 +156,41 @@ function main(){
                     //echo "e";
                     continue;          
                 }else{
-                    //タイルピクセルからDEM値を取得
-                    $rgb = imagecolorat($im, $px, $py);
-                    $r = ($rgb >> 16) & 0xFF;
-                    $g = ($rgb >> 8) & 0xFF;
-                    $b = $rgb & 0xFF;
-                    if($r === 128 && $g === 0 && $b ===0 ){
-                        //DEMが無効値なら無効値のままにしておく？
-                        //continue;          
-                        //無効値なのは水面が大半なので、ジオイド値をセットしたい。よってDEM値ゼロを与える
-                        $dem = 0.0;
+                    if($geoidonly === "1"){
+                        //ジオイドのみのタイルが欲しい時
+                        $dem = 0;
                     }else{
-                        $x = 65536 * $r + 256 * $g + $b;
-                        //echo( "  " . $x . "    ");
-                        if($x == 8388608){
-                            //無効値
-                            imagesetpixel($im, $px, $py, imagecolorallocate($im, 128, 0, 0));//e
-                            continue;
-                        }else if($x < 8388608){
-                            $dem = 0.01 * $x;
-                        }else{ //if($x > 8388608)
-                            $dem = 0.01 * ($x - 16777216);
+                        //タイルピクセルからDEM値を取得
+                        $rgb = imagecolorat($im, $px, $py);
+                        $r = ($rgb >> 16) & 0xFF;
+                        $g = ($rgb >> 8) & 0xFF;
+                        $b = $rgb & 0xFF;
+                        if($r === 128 && $g === 0 && $b ===0 ){
+                            //DEMが無効値なら無効値のままにしておく？
+                            continue;          
+                            //DEMが無効値なのは水面が大半なので、ジオイド値をセットしたい時はDEM値ゼロを与える
+                            //$dem = 0.0;
+                        }else{
+                            $x = 65536 * $r + 256 * $g + $b;
+                            //echo( "  " . $x . "    ");
+                            if($x == 8388608){
+                                //無効値
+                                imagesetpixel($im, $px, $py, imagecolorallocate($im, 128, 0, 0));//e
+                                continue;
+                            }else if($x < 8388608){
+                                $dem = 0.01 * $x;
+                            }else{ //if($x > 8388608)
+                                $dem = 0.01 * ($x - 16777216);
+                            }
                         }
                     }
                     
                     //事前計算した値からジオイド値を計算
                     $geoid =                                                                 //Z=
-                         $ti[$py] * $ui[$px] * $_SESSION[$south[$py]."_".$west[$px]]         //  (1-t)*(1-u)*Z(i,j)
-                       + $ti[$py] * $u[$px] * $_SESSION[$south[$py]."_".$east[$px]]          // +(1-t)*u    *Z(i,j+1)
-                       + $t[$py] * $ui[$px] * $_SESSION[$north[$py]."_".$west[$px]]          // +    t*(1-u)*Z(i+1,j)
-                       + $t[$py] * $u[$px] * $_SESSION[$north[$py]."_".$east[$px]]           // +    t*u    *Z(i+1,j+1)
+                         $ti[$py] * $ui[$px] * $GEOID[$south[$py]."_".$west[$px]]         //  (1-t)*(1-u)*Z(i,j)
+                       + $ti[$py] * $u[$px] * $GEOID[$south[$py]."_".$east[$px]]          // +(1-t)*u    *Z(i,j+1)
+                       + $t[$py] * $ui[$px] * $GEOID[$north[$py]."_".$west[$px]]          // +    t*(1-u)*Z(i+1,j)
+                       + $t[$py] * $u[$px] * $GEOID[$north[$py]."_".$east[$px]]           // +    t*u    *Z(i+1,j+1)
                        ;
                     //地上高（楕円体高）の計算 
                     $gndAltElla = $dem + $geoid;        //楕円体高 ＝ DEM値 ＋ ジオイド値
