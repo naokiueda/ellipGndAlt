@@ -121,7 +121,7 @@ function main(){
         debug('データベース選択成功');
         
         mysql_set_charset('utf8');
-        $sql = 'SELECT * FROM geoid WHERE j >= ' . $j0 . " AND j <= " . $j1 . " AND i >= " . $i0 . " AND i <= " . $i1 . " LIMIT 70000 " ;
+        $sql = 'SELECT * FROM geoid WHERE j >= ' . $j0 . " AND j <= " . $j1 . " AND i >= " . $i0 . " AND i <= " . $i1 . " LIMIT 140000 " ;
         debug($sql);
         $result = mysql_query($sql);
         if (!$result) {
