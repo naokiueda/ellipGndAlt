@@ -1,4 +1,11 @@
 <?php
+// written by Naoki Ueda, Locazing Inc.
+// 
+// Lincese:
+// CC-BY 4.0  
+// https://creativecommons.org/licenses/by/4.0/
+//
+
 //$start_time=microtime(true);
 //ini_set('display_errors', '1');
  
