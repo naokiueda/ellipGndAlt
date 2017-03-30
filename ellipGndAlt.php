@@ -1,10 +1,10 @@
 <?php
+
 // written by Naoki Ueda, Locazing Inc.
 // 
 // Lincese:
 // CC-BY 4.0  
 // https://creativecommons.org/licenses/by/4.0/
-//
 
 //$start_time=microtime(true);
 //ini_set('display_errors', '1');
@@ -18,11 +18,11 @@ function main(){
         $geoidJband = 30.0/1800.0;
         $geoidIband = 0.025;
 
-        //データベースの接続情報を入れてください
-        $dbhost = "localhost"
-        $dbdatabase = "*****";
-        $dbuser = "*****";
-        $dbpw = "*****";
+        //データベース接続情報を書いて下さい。
+        $dbhost = "localhost";
+        $dbdatabase = "******";
+        $dbuser = "******";
+        $dbpw = "******";
         
         
         //Get Parameter
@@ -63,21 +63,14 @@ function main(){
         //i/jは国土地理院のジオイドデータの格子点で、
         //iは東経120°から東へ向かって150°まで1.5分間隔で0～1800まで
         //jは北緯20°から北へ向かって50°まで1分間隔で0から1200まで
-        $j0 = floor(($lon0 - 120)/$geoidIband);
-        $j1 = ceil(($lon1 - 120)/$geoidIband);
-        $i0 = floor(($lat0 - 20)/$geoidJband);
-        $i1 = ceil(($lat1 - 20)/$geoidJband);
+        $j0 = floor(($lon0 - 120 )/$geoidIband);
+        $j1 = floor(($lon1 - 120 )/$geoidIband);
+        $i0 = floor(($lat0 - 20 )/$geoidJband);
+        $i1 = floor(($lat1 - 20 )/$geoidJband);
         debug("j0=".$j0);
         debug("j1=".$j1);
         debug("i0=".$i0);
         debug("i1=".$i1);
-        
-        //該当ズームレベルにおける1ピクセルあたりのi/jの増加分
-        $jTileBand = ($j1 - $j0)/256;
-        $iTileBand = ($i1 - $i0)/256;
-        debug("jTileBand=".$jTileBand);
-        debug("iTileBand=".$iTileBand);
-
         
         //2重ループ内での計算をなるべく避けるため、必要な値を事前に計算しておく。XYそれぞれピクセル座標をキーにした配列で持っておく。
         //各経度成分ピクセルについて
@@ -90,7 +83,7 @@ function main(){
             $u[$px] = $j - $west[$px];     //このピクセルと西側格子点までの距離（単位は格子点座標にて0～1の間）内挿計算方法の式で u に相当する
             $ui[$px] = 1-$u[$px];          //内挿計算方法の式で (1-u) に相当する
             $px+=1;
-            $j+=$jTileBand;
+            $j = $j0 + (($j1 - $j0) * $px / 256);
         }
 
         $py = (int)0;
@@ -101,7 +94,7 @@ function main(){
             $t[$py] = $i - $south[$py];    //このピクセルと南側格子点までの距離（単位は格子点座標にて0～1の間）内挿計算方法の式で v に相当する
             $ti[$py] = 1- $t[$py];         //内挿計算方法の式で (1-v) に相当する
             $py++;
-            $i-=$iTileBand;
+            $i = $i1 - (($i1 - $i0) * $py / 256) ;
         }
         
         
